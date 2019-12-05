@@ -2,79 +2,28 @@ library(rvest)
 library(magrittr)
 library(data.table)
 library(stringr)
-setwd("/Users/briancreagh/XTB/NCAAF/Data/Production")
+
+source('gameIdScraper.R')
 
 #Create list of relevant ESPN Game IDs
-gameids <- c("401119305",
-             "401119306",
-             "401119307",
-             "401119308",
-             "401112513",
-             "401117550",
-             "401110859",
-             "401110857",
-             "401114162",
-             "401114173",
-             "401112120",
-             "401112083",
-             "401112263",
-             "401112167",
-             "401112113",
-             "401112236",
-             "401112155",
-             "401112515",
-             "401117907",
-             "401117909",
-             "401112128",
-             "401117551",
-             "401117906",
-             "401117908",
-             "401117910",
-             "401119309",
-             "401121977",
-             "401112516",
-             "401114315",
-             "401112518",
-             "401112519",
-             "401112520",
-             "401114182",
-             "401114191",
-             "401114206",
-             "401114217",
-             "401110861",
-             "401112094",
-             "401112210",
-             "401112220",
-             "401112256",
-             "401110855",
-             "401110856",
-             "401114358",
-             "401183793",
-             "401121976",
-             "401112514",
-             "401121973",
-             "401121974",
-             "401117911",
-             "401114317",
-             "401114318",
-             "401114313",
-             "401110858",
-             "401110862",
-             "401114319",
-             "401117553",
-             "401114316",
-             "401121975",
-             "401114314",
-             "401112517",
-             "401110860",
-             "401117549",
-             "401117552")
+gameids <- getGameIds("https://www.espn.com/college-football/schedule/_/week/14")
 
-playbyplayagg19 <- playbyplayagg2
-playbyplayagg19 <- playbyplayagg19[0,]
+playbyplayagg19 <- data.frame("plays"=NA,
+                              "col2"=NA,
+                              "target"=NA,
+                              "WRtarget"=NA,
+                              "time"=NA,
+                              "QBtarget"=NA,
+                              "Rush"=NA,
+                              "RushAtt"=NA,
+                              "gameID"=NA,
+                              "field"=NA,
+                              "teamfield"=NA)[0,]
+
 
 #function to scrape plays from ESPN
 for (i in gameids){
+  i = gameids[1]
 url <- read_html(paste("http://www.espn.com/college-football/playbyplay?gameId=",i, sep = ''))
   
 plays <- url %>%
@@ -189,7 +138,7 @@ playbyplaytest$Target <- ifelse(playbyplaytest$WRtarget!='',1,0)
 playbyplaytest$FirstDown <- ifelse(grepl('1ST down',playbyplaytest$plays),1,0)
 playbyplaytest$Season <- "2019"
 
-write.csv(playbyplaytest, paste0("playbyplaytest",Sys.Date(),".csv"))
+write.csv(playbyplaytest, paste0("playbyplay",Sys.Date(),"_", format(Sys.time(), "%h%m%s"), ".csv"))
 
 
 
@@ -203,6 +152,20 @@ write.csv(playbyplaytest, paste0("playbyplaytest",Sys.Date(),".csv"))
   home19 <- merge(x=rosters19, y=schedule19, by.x = "Team",by.y = "Home")
   home19 <- home19[,c(1,4:12,17)]
   player_schedule19 <- rbind(away19, home19)
-  write.csv(player_schedule19, paste0("player_schedule",Sys.Date(),".csv"))
+  write.csv(player_schedule19, paste0("player_schedule",Sys.Date(),"_", format(Sys.time(), "%h%m%s"), ".csv"))
 
 
+  
+#Dump this on the AWS rdb instance
+library(RMySQL)
+aws = dbConnect(MySQL(), user='admin', password='expandtheboxscore', dbname='CFB', 
+                 host='database-1.chaj45z3rtec.us-east-2.rds.amazonaws.com')
+
+#Write tables (This needs work, it will add duplicates)
+dbWriteTable(aws, name = "playbyplay", value = playbyplaytest, append = TRUE, row.names = FALSE, overwrite = FALSE)
+dbWriteTable(aws, name = "rosters", value = player_schedule19, append = TRUE, row.names = FALSE, overwrite = FALSE)
+
+#Close connections
+lapply(dbListConnections( dbDriver( drv = "MySQL")), dbDisconnect)
+
+  
