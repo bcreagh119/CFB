@@ -2,9 +2,8 @@ library(rvest)
 library(dplyr)
 library(stringr)
 library(lubridate)
-week = 13
 url = "https://www.espn.com/college-football/schedule/_/week/14"
-getGameIds <- function(week){
+getGameIds <- function(week, year = format(Sys.time(), '%Y')){
     #Build empty output frame
   output_df <- data.frame(
     Date = NA,
@@ -12,9 +11,15 @@ getGameIds <- function(week){
     Home = NA
   )[0,]
   
+  #Paste in the right URL base if this is a later year
+  if (year == format(Sys.time(), '%Y')){
+    url <- paste("https://www.espn.com/college-football/schedule/_/week/", week, "/seasontype/2", sep = "")
+  } else {
+    url <- paste("https://www.espn.com/college-football/schedule/_/week/", week, "/year/", year, "/seasontype/2", sep = "")
+  }
+  
   #Create html connection
-  connection <- paste("https://www.espn.com/college-football/schedule/_/week/", week, sep = "") %>%
-    html_session
+  connection <- html_session(url)
   
   #Pull game links for complete games
   links <- html_nodes(connection, "[name='&lpos=college-football:schedule:score']") %>%
@@ -30,7 +35,7 @@ getGameIds <- function(week){
   #Get dates and format them
   dates <- html_nodes(connection, "[class='table-caption']") %>%
     html_text %>%
-    paste("2019")
+    paste(year)
   dates <- format(mdy(dates), "%m/%d/%y")
   
   #Get games table
@@ -58,6 +63,6 @@ getGameIds <- function(week){
   output_df$Links <- links
   output_df <- cbind(output_df, gameIDs)
   output_df$Week <- week
-  output_df$Season <- "2019"
+  output_df$Season <- year
   return(output_df)
 }
